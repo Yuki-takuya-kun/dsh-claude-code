@@ -1,0 +1,6 @@
+# dsh-claude-code bundle patch: mount the Claude Code main-loop plugin.
+- insert:
+    - id: dsh-claude-code
+      name: dsh-claude-code
+      config:
+        enabled: false
