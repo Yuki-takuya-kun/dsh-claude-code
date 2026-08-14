@@ -10,7 +10,7 @@ export const inject = ["agents", "sessions", "subprocess"];
 
 export const Config = z.object({
   enabled: z.boolean().default(false),
-  // Claude Code 可执行：默认为原生 claude；临时可用 mc --code 的 shim 替代。
+  // Claude Code 可执行：默认从 PATH 解析 claude。
   executable: z.string().default("claude"),
   persistSession: z.boolean().default(true),
   includePartialMessages: z.boolean().default(true),

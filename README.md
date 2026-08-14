@@ -2,7 +2,7 @@
 
 Run **Claude Code's harness** as the **DeepSeek Harness (DSH) main loop**, streaming its full trajectory — text, thinking, tool calls and results — into the DSH web UI in real time.
 
-> ⚠️ Pre-release. Replaces the per-session agent driver; for users who want Claude Code's loop with DSH's session/UI.
+> 🚧 **PRE-RELEASE — NOT YET USABLE.** This is an early work-in-progress. Authentication and several other features are **not yet implemented or verified**, and it has not been validated end-to-end. **Do not use in production.** It may not work out of the box without additional setup.
 
 ## What it does
 
