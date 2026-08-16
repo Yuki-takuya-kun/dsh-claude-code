@@ -43,7 +43,7 @@ Edit `~/.dsh/profiles/web/cordis.patch.yml`:
 - id: dsh-engine-switch
   config:
     enabled: true
-    # engine private config (optional):
+    # optional: claude-code engine options:
     engines:
       claude-code:
         executable: claude
@@ -52,9 +52,9 @@ Edit `~/.dsh/profiles/web/cordis.patch.yml`:
 
 Restart the web app. A "Claude Code" preset appears: pick it → Claude Code, anything else → DeepSeek.
 
-## ⚙️ Engine private config
+## ⚙️ Config
 
-(written under dsh-engine-switch's `config.engines["claude-code"]`)
+These are options for the claude-code engine, written under dsh-engine-switch's `config.engines["claude-code"]`:
 
 | Key | Default | Meaning |
 |---|---|---|

@@ -43,7 +43,7 @@ dsh plugin --profile web add github:Yuki-takuya-kun/dsh-engine-switch \
 - id: dsh-engine-switch
   config:
     enabled: true
-    # 引擎私有配置（可选）：
+    # 可选：claude-code 引擎的选项：
     engines:
       claude-code:
         executable: claude
@@ -52,9 +52,9 @@ dsh plugin --profile web add github:Yuki-takuya-kun/dsh-engine-switch \
 
 重启 web 应用。预设列表出现「Claude Code」：选中它 → Claude Code，选其它 → DeepSeek。
 
-## ⚙️ 引擎私有配置
+## ⚙️ 配置
 
-（写在 dsh-engine-switch 的 `config.engines["claude-code"]` 里）
+这些是 claude-code 引擎的选项，写在 dsh-engine-switch 的 `config.engines["claude-code"]` 下：
 
 | 键 | 默认 | 含义 |
 |---|---|---|
