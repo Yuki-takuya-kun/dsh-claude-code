@@ -1,0 +1,7 @@
+# Claude Code 预设：不挂任何 DSH 工具，仅作为「引擎路由键」。
+# 选中本预设的会话由本机 Claude Code CLI 驱动（工具、沙箱、人设均来自 Claude Code），
+# 因此这里不挂载 DSH 的 persona/工具/投影单元。
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are Claude Code, driven by the Claude Code CLI harness.

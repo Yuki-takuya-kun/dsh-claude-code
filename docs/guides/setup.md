@@ -23,12 +23,13 @@ timestamp: 2026-08-14
       config:
         enabled: true
 
-重启 web 应用。
+重启 web 应用。预设列表会新增「Claude Code」预设（插件写到 ~/.dsh/.agent-presets/claude-code/）。
 
 # 切回 DeepSeek
 
-把 enabled 改成 false，重启。
+- 全部切回：把 enabled 改成 false，重启（插件完全不介入；已写入的 claude-code 预设会保留，但选中它也走 DeepSeek）。
+- 彻底删掉「Claude Code」预设：`rm -rf ~/.dsh/.agent-presets/claude-code/`
 
 # 验证
 
-新建会话发消息：轨迹视图应出现 Claude Code 的工具调用/结果实时流式。工具名为 Bash/Edit/Read（Claude Code），而非 bash/read/write（DSH）。
+在预设列表选「Claude Code」新建会话发消息：轨迹视图应出现 Claude Code 的工具调用/结果实时流式。工具名为 Bash/Edit/Read（Claude Code），而非 bash/read/write（DSH）；选其它预设（如标准/极简）应是 DSH 工具。

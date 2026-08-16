@@ -12,7 +12,7 @@ timestamp: 2026-08-14
 
 # 运行单测
 
-    node --test test/trace.test.mjs
+    node --test test/*.test.mjs
 
 # 语法检查
 
@@ -20,10 +20,13 @@ timestamp: 2026-08-14
 
 # 目录结构
 
-- index.mjs —— 插件入口（工厂替换）
+- index.mjs —— 插件入口（注册 `claude-code` 引擎到 `ctx.engineSwitch`）
 - lib/agent.mjs —— ClaudeCodeAgent（Agent 接口 + Claude 驱动）
 - lib/driver.mjs —— Claude Code query() 生命周期
 - lib/trace.mjs —— SDK 事件 → DSH 会话事件映射（纯函数）
-- lib/approval.mjs —— 审批桥
+- lib/approval.mjs —— canUseTool 桥（审批 seam + AskUserQuestion 选择题）
+- lib/permission.mjs —— DSH 权限（sandbox/mode + approval/policy）→ canUseTool 策略（纯函数）
+- lib/dialog.mjs —— request_user_dialog 桥（onUserDialog，候选路径）
+- lib/store.mjs —— Claude 会话 id 旁路持久化
 - lib/auth.mjs —— 可执行解析 + env 合成
-- test/trace.test.mjs —— 映射单测
+- test/trace.test.mjs、test/permission.test.mjs —— 映射/权限单测

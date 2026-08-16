@@ -1,6 +1,4 @@
-# dsh-claude-code bundle patch: mount the Claude Code main-loop plugin.
+# dsh-claude-code bundle patch: register the Claude Code engine with dsh-engine-switch.
 - insert:
     - id: dsh-claude-code
       name: dsh-claude-code
-      config:
-        enabled: false

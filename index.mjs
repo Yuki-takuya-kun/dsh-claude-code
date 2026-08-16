@@ -1,142 +1,49 @@
-// index.mjs — dsh-claude-code 插件入口：enabled 时把顶层会话主循环交给 Claude Code。
-// 子代理与 resume 委托回原 AgentLoop（DeepSeek）。
-import z from "@deepseek-ai/schemastery";
-import { SessionPreparation } from "@deepseek-ai/dsh-session";
-import { emitAgentEvent } from "@deepseek-ai/dsh-agent";
+// index.mjs — dsh-claude-code：把 Claude Code 注册成 dsh-engine-switch 的一个引擎。
+// 本插件不再自己替换 ctx.agents.factory；它只定义 claude-code 引擎（ClaudeCodeAgent + 预设），
+// 交给 dsh-engine-switch 负责 preset → 引擎路由、空白会话内 swap、resume 续接。
+import { fileURLToPath } from "node:url";
 import { ClaudeCodeAgent } from "./lib/agent.mjs";
+import { load as loadClaudeSessionId } from "./lib/store.mjs";
 
 export const name = "dsh-claude-code";
-export const inject = ["agents", "sessions", "subprocess"];
+export const inject = ["engineSwitch"];
 
-export const Config = z.object({
-  enabled: z.boolean().default(false),
-  // Claude Code 可执行：默认从 PATH 解析 claude。
-  executable: z.string().default("claude"),
-  persistSession: z.boolean().default(true),
-  includePartialMessages: z.boolean().default(true),
-  env: z.dict(z.string()).default({}),
-});
+/** 引擎 id，同时是预设目录名（dsh-engine-switch 按 id 落地预设并做 by-id 路由）。 */
+export const CLAUDE_CODE_ENGINE_ID = "claude-code";
 
-/** 工厂：createAgent/resume 与 AgentLoop 同契约，但驱动换成 Claude Code。 */
-class ClaudeCodeFactory {
-  constructor(ctx, config, originalFactory) {
-    this.loopCtx = ctx;
-    this.config = config;
-    this.original = originalFactory;
-  }
+const PRESET_DIR = fileURLToPath(new URL("./presets/claude-code/", import.meta.url));
 
-  // ── 工厂契约 ──────────────────────────────────────────────
-  async createAgent(ownerCtx, options) {
-    // 子代理会话始终委托回原循环（DeepSeek），与顶层开关无关
-    if (options?.meta?.origin === "subagent" && this.original) {
-      return this.original.createAgent(ownerCtx, options);
+/** 引擎私有配置默认值（覆盖在 dsh-engine-switch 的 config.engines["claude-code"] 之上）。 */
+const DEFAULTS = {
+  executable: "claude",
+  persistSession: true,
+  includePartialMessages: true,
+  env: {},
+};
+
+const claudeCodeEngine = {
+  id: CLAUDE_CODE_ENGINE_ID,
+  name: "Claude Code",
+  description: "由本机 Claude Code CLI 驱动会话，工具与沙箱均来自 Claude Code。",
+  presetDir: PRESET_DIR,
+
+  makeAgent(loopCtx, id, options, session, engineConfig, resumeState) {
+    const config = { ...DEFAULTS, ...(engineConfig ?? {}) };
+    const machine = new ClaudeCodeAgent(loopCtx, id, options, session, config);
+    // resume 路径：恢复上一进程捕获的 Claude 会话 id，让首轮续接同一 Claude 会话
+    if (resumeState?.claudeSessionId) {
+      machine.claudeSessionId = resumeState.claudeSessionId;
     }
-    // 全局 Claude：enabled 时，所有新顶层会话由 Claude Code 驱动
-    if (this.config.enabled) {
-      const preparation = SessionPreparation.create(
-        this.loopCtx.sessions.prepare(options.sessionId, {
-          ...(options.seed === undefined ? {} : { seed: options.seed }),
-          ...(options.meta === undefined ? {} : { meta: options.meta }),
-        })
-      );
-      return this.setupAndPublish(ownerCtx, options.sessionId, preparation, options.agentOptions ?? {}, undefined, options.signal, "startup");
-    }
-    // disabled：委托回原循环（DeepSeek）
-    if (this.original) {
-      return this.original.createAgent(ownerCtx, options);
-    }
-    throw new Error("dsh-claude-code: no original factory to delegate");
-  }
+    return machine;
+  },
 
-  async resume(ownerCtx, options) {
-    // v1：持久化会话的 resume 委托回原循环（DeepSeek）
-    if (this.original) return this.original.resume(ownerCtx, options);
-    throw new Error("dsh-claude-code: no original factory to delegate resume");
-  }
+  async resolveResumeState(_loopCtx, options) {
+    const claudeSessionId = await loadClaudeSessionId(options.resumeSessionId);
+    return { claudeSessionId };
+  },
+};
 
-  // ── 复刻 AgentLoop.prepare/setupAndPublish（用 ClaudeCodeAgent 代替 ReactLoopAgent） ──
-  prepare(ownerCtx, id, agentOptions, session, callerSignal) {
-    const loopCtx = this.loopCtx;
-    const abort = new AbortController();
-    const onCallerAbort = () => abort.abort(callerSignal?.reason instanceof Error ? callerSignal.reason : new Error(`agent "${id}" creation aborted`));
-    callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
-    let machine;
-    let detachSession;
-    let detachAgent;
-    let disposing;
-    const machineReady = Promise.withResolvers();
-    const dispose = () => disposing ??= (async () => {
-      abort.abort(new Error(`agent "${id}" lifecycle disposed`));
-      callerSignal?.removeEventListener("abort", onCallerAbort);
-      try {
-        if (machine === undefined) await machineReady.promise;
-        if (machine !== undefined) {
-          machine.cancel({ kind: "disposed" });
-          await machine.whenIdle();
-          await machine.scope.dispose();
-        }
-      } finally {
-        try {
-          detachAgent?.();
-          detachSession?.();
-        } catch {
-          /* 忽略 detach 失败 */
-        }
-      }
-    })();
-    try {
-      machine = new ClaudeCodeAgent(loopCtx, id, agentOptions, session, this.config);
-      machineReady.resolve();
-      return {
-        agent: machine,
-        signal: abort.signal,
-        publish: (source) => {
-          detachSession = machine.ctx.sessions.enter(session);
-          detachAgent = loopCtx.agents.enter(machine, ownerCtx.agent);
-          machine.ctx.sessions.announce(session);
-          loopCtx.agents.announce(machine);
-          emitAgentEvent(loopCtx, machine, "agent/session-start", { source });
-          return { agent: machine, dispose };
-        },
-        dispose,
-      };
-    } catch (error) {
-      machineReady.resolve();
-      void dispose();
-      throw error;
-    }
-  }
-
-  async setupAndPublish(ownerCtx, id, preparation, agentOptions, setup, signal, source) {
-    const session = preparation.session;
-    const prepared = this.prepare(ownerCtx, id, agentOptions, session, signal);
-    try {
-      const committed = await setup?.(prepared.agent.ctx);
-      committed?.commit?.();
-      return prepared.publish(source);
-    } catch (error) {
-      await prepared.dispose();
-      throw error;
-    }
-  }
-}
-
-export function apply(ctx, config) {
-  if (!config.enabled) {
-    ctx.logger?.info?.("dsh-claude-code: disabled (enabled=false) — DeepSeek loop unchanged");
-    return;
-  }
-  const original = ctx.agents.factory?.target;
-  if (original === undefined) {
-    ctx.logger?.warn?.("dsh-claude-code: no agent factory registered to replace");
-    return;
-  }
-  const claudeFactory = new ClaudeCodeFactory(ctx, config, original);
-  ctx.agents.factory = { target: claudeFactory };
-  ctx.logger?.info?.(`dsh-claude-code: enabled — replaced agent factory (executable: ${config.executable ?? "claude"})`);
-  return () => {
-    if (ctx.agents.factory?.target === claudeFactory) {
-      ctx.agents.factory = original === undefined ? undefined : { target: original };
-    }
-  };
+export function apply(ctx) {
+  ctx.engineSwitch.register(claudeCodeEngine);
+  ctx.logger?.info?.(`dsh-claude-code: registered engine "${CLAUDE_CODE_ENGINE_ID}"`);
 }

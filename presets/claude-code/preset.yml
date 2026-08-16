@@ -1,0 +1,3 @@
+name: Claude Code
+description: 由本机 Claude Code CLI 驱动会话，工具与沙箱均来自 Claude Code。
+order: 99

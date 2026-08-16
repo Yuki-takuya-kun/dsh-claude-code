@@ -1,23 +1,26 @@
 ---
 type: Architecture
 title: 架构
-description: 工厂槽位替换 + ClaudeCodeAgent 驱动 + SDK 事件到 DSH 会话事件的实时映射。
+description: 引擎注册（ctx.engineSwitch）+ ClaudeCodeAgent 驱动 + SDK 事件到 DSH 会话事件的实时映射。
 resource: index.mjs
-tags: [architecture, factory, trajectory, agent]
+tags: [architecture, engine, trajectory, agent]
 timestamp: 2026-08-14
 ---
 
 # 数据流
 
-用户消息 → session.prompt → ctx.agents.get(sessionId) → ClaudeCodeAgent → Claude Code query() → SDK 事件 → trace.mjs 映射 → DSH 会话事件 → 轨迹视图实时渲染
+用户消息 → session.prompt → dsh-engine-switch 按 preset 选引擎 → ClaudeCodeAgent → Claude Code query() → SDK 事件 → trace.mjs 映射 → DSH 会话事件 → 轨迹视图实时渲染
 
 # 关键机制
 
-- 工厂槽位替换：apply() 里把 ctx.agents.factory 替换成 ClaudeCodeFactory。
-- ClaudeCodeAgent：实现 dsh-agent 公开 Agent 接口（Inbox、状态、取消），每轮跑 Claude Code。
+- 引擎注册（index.mjs）：`dsh-claude-code` 定义 `claude-code` 引擎对象 `{ id, name, description, presetDir, makeAgent, resolveResumeState }`，`apply()` 里 `ctx.engineSwitch.register(...)` 注册（`inject: ["engineSwitch"]`）。
+- 路由（dsh-engine-switch 负责）：`engineByPreset` 命中 > 引擎自带预设（id 即引擎 id）> `defaultEngine`；空白会话内切预设即 swap 引擎；resume 按 `resolveSessionPreset`（读日志）反推。`dsh-claude-code` 不替换 `ctx.agents.factory`。
+- 预设落地（dsh-engine-switch 的 registry onRegister）：注册引擎时把其 `presetDir` 写到用户 root（`~/.dsh/.agent-presets/claude-code/`），发现过程每次 list() 重扫，即出现在预设列表。
+- ClaudeCodeAgent（lib/agent.mjs）：实现 dsh-agent 公开 Agent 接口（Inbox、状态、取消），每轮跑 Claude Code。
 - 轨迹透传（lib/trace.mjs）：ClaudeRunTracer 把 SDK 消息流映射成 DSH 会话事件。
-- 审批桥（lib/approval.mjs）：canUseTool → ctx.userQuestions.ask。
+- 权限映射与审批桥（lib/permission.mjs + lib/approval.mjs）：读会话 `sandbox/mode` + `approval/policy` 映射成 `canUseTool` 策略（`workspace-write` 区内放行、区外走 `ctx.approval.request` 审批；`danger-full-access` 设 `bypassPermissions`；`approval/policy=never` 无交互区内放行区外拒绝）；`AskUserQuestion` 经 `ctx.userQuestions.ask` 弹 DSH 选择题作答。
 - 双通道认证（lib/auth.mjs）：原生 claude 登录 + ANTHROPIC_API_KEY。
+- 精确续接（lib/store.mjs）：旁路持久化 Claude 会话 id，`resolveResumeState` 在 resume 时恢复。
 
 # 事件映射
 
@@ -25,5 +28,6 @@ timestamp: 2026-08-14
 
 # 已知限制
 
-- 恢复（resume）的会话回落到 DeepSeek 循环（v1）。
-- 每会话驱动在 agent 创建时定死，无法在运行中切换（DSH 预设 recompose 只换工具、不换驱动）。
+- preset id 只当路由键：切到 Claude 的 preset，其 DSH 工具与人设（persona）**不透传**给 Claude Code（Claude 自带工具与默认人设）。
+- 子代理始终走 DeepSeek（与顶层路由无关）。
+- 精确续接依赖插件旁路持久化（`~/.dsh/dsh-claude-code/sessions.json`）；若该文件丢失，Claude 会话退化为重放而非精确续接。
