@@ -1,64 +1,74 @@
 # dsh-claude-code
 
-Register **Claude Code** as a pluggable **engine** for DeepSeek Harness (DSH) top-level sessions via [dsh-engine-switch](https://github.com/Yuki-takuya-kun/dsh-engine-switch), streaming its full trajectory — text, thinking, tool calls and results — into the DSH web UI in real time.
+<!-- Hero -->
+<div align="center">
+  <b style="font-size: 1.15em;">在 DSH 里用 Claude Code 驱动会话，轨迹实时可见</b><br /><br />
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a><br /><br />
+  <img alt="轨迹实时流式" src="https://img.shields.io/badge/-轨迹实时流式-4d6bfe" /> <img alt="权限桥接" src="https://img.shields.io/badge/-权限桥接-4d6bfe" /> <img alt="零配置注册" src="https://img.shields.io/badge/-零配置注册-4d6bfe" /><br /><br />
+  <b>DSH 默认只用 DeepSeek</b>。装上 <a href="https://github.com/Yuki-takuya-kun/dsh-engine-switch">dsh-engine-switch</a> + 本插件，<br />
+  预设列表就多一个「Claude Code」——选中它用 Claude Code 驱动，选其它用 DeepSeek。
+</div>
 
-> 🚧 **PRE-RELEASE — NOT YET USABLE.** Early work-in-progress. Authentication and other paths are not yet validated end-to-end. Do not use in production.
+<div align="center">
+  🌏 <a href="./README.md"><b>中文</b></a> · <a href="./README_EN.md">English</a>
+</div>
 
-## What it does
+## ✨ 能干什么
 
-This bundle does **not** replace the main loop itself. It only defines a `claude-code` engine (`ClaudeCodeAgent` + `presets/claude-code/`) and registers it with `dsh-engine-switch` via `ctx.engineSwitch`. The latter owns the "preset → engine" routing, blank-session switching, and resume.
+- **🎯 一键接入 Claude Code**：注册一个 `claude-code` 引擎（`ClaudeCodeAgent` + 预设），交给 [dsh-engine-switch](https://github.com/Yuki-takuya-kun/dsh-engine-switch) 按预设路由，零配置自动对上。
+- **📡 轨迹实时可见**：文本、思考、工具调用与结果，每一步都实时流进 DSH 会话。
+- **🔐 权限桥接**：DSH 的沙箱模式 + 审批策略，映射到 Claude 的权限回调（工作区内写放行、区外弹审批）；`AskUserQuestion` 用 DSH 的选择题 UI 作答。
+- **🧰 工具与沙箱都来自 Claude Code**：预设只当路由键，不把 DSH 的 persona / 工具透传过去。
+- **⏯️ 精确续接**：Claude 会话 id 旁路持久化，续聊接回同一个 Claude 会话。
+- **🌐 子代理照旧 DeepSeek**：不管主会话选了谁，子代理都走 DeepSeek。
 
-With both bundles installed, a **"Claude Code" preset** appears in the picker: **selecting it → Claude Code, anything else → DeepSeek**. Claude Code keeps its own tools/sandbox; DSH keeps the session log and UI, and every step is streamed live.
+> 🔌 **一句话**：本插件**不自己替换主循环**——它只定义一个 `claude-code` 引擎，交给 dsh-engine-switch 负责「预设 → 引擎」路由、切换与续接。预设只是路由键：切到它，工具、沙箱、人设都来自 Claude Code，DSH 保留日志与界面。
 
-## Install
+## 🚀 安装
 
-`dsh-engine-switch` must be installed **first** — it provides the `ctx.engineSwitch` service this plugin peer-depends on (peer dependencies are not auto-installed):
+**先装 [dsh-engine-switch](https://github.com/Yuki-takuya-kun/dsh-engine-switch)**（它提供本插件依赖的 `ctx.engineSwitch` 服务，peer 依赖不会自动装）：
 
-    # one-liner: engine-switch first, then this plugin
-    dsh plugin --profile web add github:Yuki-takuya-kun/dsh-engine-switch \
-      && dsh plugin --profile web add github:Yuki-takuya-kun/dsh-claude-code
+```sh
+dsh plugin --profile web add github:Yuki-takuya-kun/dsh-engine-switch \
+  && dsh plugin --profile web add github:Yuki-takuya-kun/dsh-claude-code
+```
 
-Requirements: pnpm on PATH, and a working claude CLI (installed + authenticated) or an ANTHROPIC_API_KEY.
+要求：PATH 里有 pnpm；本机有可用的 claude CLI（已登录）或 `ANTHROPIC_API_KEY`。
 
-## Enable
+## ⚙️ 启用
 
-Edit ~/.dsh/profiles/web/cordis.patch.yml:
+编辑 `~/.dsh/profiles/web/cordis.patch.yml`：
 
-    - id: dsh-engine-switch
-      config:
-        enabled: true
-        # engine private config (optional):
-        engines:
-          claude-code:
-            executable: claude
-            # env: { ANTHROPIC_API_KEY: sk-... }  # when not logged in
+```yaml
+- id: dsh-engine-switch
+  config:
+    enabled: true
+    # 引擎私有配置（可选）：
+    engines:
+      claude-code:
+        executable: claude
+        # env: { ANTHROPIC_API_KEY: sk-... }  # 未登录时用
+```
 
-Restart the web app. A "Claude Code" preset appears: select it → Claude Code, anything else → DeepSeek. Subagents always stay DeepSeek; resume re-derives the engine from the log's current preset.
+重启 web 应用。预设列表出现「Claude Code」：选中它 → Claude Code，选其它 → DeepSeek。
 
-## How it works
+## ⚙️ 引擎私有配置
 
-- `dsh-claude-code` defines the `claude-code` engine and registers it in `apply()` via `ctx.engineSwitch.register(claudeCodeEngine)` (`inject: ["engineSwitch"]`).
-- `dsh-engine-switch` routes: `engineByPreset` hit > engine's own preset (id == engine id) > `defaultEngine`; blank-session preset switch swaps the engine; resume re-derives via `resolveSessionPreset` (reads the log).
-- `ClaudeCodeAgent`: implements the dsh-agent `Agent` contract (Inbox/status/cancel), runs Claude Code per turn.
-- SDK events → DSH session events (turn/start → step/start → assistant/chunk → assistant/message → tool/call → tool/result → step/end → turn/end), streamed live.
-- Permissions are bridged to DSH: the session's `sandbox/mode` + `approval/policy` presets map onto the SDK `canUseTool` callback (`workspace-write` auto-allows in-workspace edits and prompts for outside paths, `danger-full-access` bypasses Claude permissions); `AskUserQuestion` is answered via the DSH choice UI. The Claude session id is side-persisted for precise resume.
+（写在 dsh-engine-switch 的 `config.engines["claude-code"]` 里）
 
-## Engine private config (under dsh-engine-switch's `config.engines["claude-code"]`)
-
-| key | default | meaning |
+| 键 | 默认 | 含义 |
 |---|---|---|
-| executable | "claude" | Claude Code executable (path or PATH name) |
-| persistSession | true | reuse the Claude session across turns |
-| includePartialMessages | true | token-level streaming |
-| env | {} | extra env (e.g. ANTHROPIC_API_KEY) |
+| executable | "claude" | Claude Code 可执行（路径或 PATH 名） |
+| persistSession | true | 跨轮复用同一个 Claude 会话 |
+| includePartialMessages | true | token 级流式输出 |
+| env | {} | 额外环境变量（如 ANTHROPIC_API_KEY） |
 
-## Limitations
+## 🔍 原理（可选阅读）
 
-- Pre-release: auth and other paths are not yet validated end-to-end.
-- A preset is only a routing key: its DSH tools and persona are not forwarded to Claude Code.
-- `AskUserQuestion` is answered through the DSH choice UI (the SDK's headless dialog path is not used).
-- Requires a working claude CLI.
+- 本插件在 `apply()` 里 `ctx.engineSwitch.register(claudeCodeEngine)` 注册 `claude-code` 引擎（`inject: ["engineSwitch"]`）。
+- 每轮跑一次 Claude Code；SDK 事件被转成 DSH 会话事件（turn / step / assistant / tool 等），实时流式。
+- 权限经 `canUseTool` 回调桥接：工作区内写放行、区外弹审批；`AskUserQuestion` 用 DSH 选择题 UI 作答。
 
-## License
+## 📄 许可证
 
-MIT. See THIRD_PARTY_NOTICES.md for third-party components.
+MIT。第三方组件见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

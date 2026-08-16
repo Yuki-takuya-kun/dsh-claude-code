@@ -15,10 +15,6 @@ dsh-claude-code 是一个 DeepSeek Harness（DSH）第三方插件（bundle）�
 
 DSH 官方已有 dsh-subagent-claude-code，把 Claude Code 作为子代理委派任务，但它只回最终答案、刻意隐藏中间轨迹。本项目要的是：复用 DSH 的界面与会话体系，同时保留 Claude Code 的 harness，并全程看得见轨迹。
 
-# 状态
-
-🚧 预发布 —— 暂不可用。鉴权以及若干其它功能尚未实现或验证，也未做过端到端验证。请勿用于生产。
-
 # 与官方子代理的区别
 
 | | 官方 dsh-subagent-claude-code | 本项目 |

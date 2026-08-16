@@ -15,7 +15,7 @@
     "presets",
     "cordis.patch.yml",
     "README.md",
-    "README.zh.md",
+    "README_EN.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
   ],

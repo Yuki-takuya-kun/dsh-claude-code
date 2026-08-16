@@ -2,6 +2,8 @@
 
 ## 2026-08-16
 
+* **Update**: README 重构为中英双语——`README.md` 改为中文默认版（Hero + 能干什么 + 一句话），英文迁至 `README_EN.md`，双向互链；删「预发布」警告、术语降噪。删除 [项目总览](/overview/project-overview.md) 的「状态」段。
+
 * **Update**: DSH 权限映射（`sandbox/mode` + `approval/policy` → `canUseTool` 策略，新增 `lib/permission.mjs`）+ `AskUserQuestion` 桥接（`canUseTool` 内弹 DSH 选择题作答）+ 安装说明改为「先装 dsh-engine-switch」。同步 [架构](/overview/architecture.md)、[开发](/guides/development.md)。
 
 ## 2026-08-14

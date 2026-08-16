@@ -2,7 +2,7 @@
 okf_version: "0.1"
 auto_docs: true
 split_threshold: 500
-last_synced_commit: "ac0b9f0"
+last_synced_commit: "53dd8ab"
 ---
 
 # dsh-claude-code
