@@ -2,6 +2,10 @@
 
 dsh-claude-code —— 让 Claude Code 的 harness 作为 DeepSeek Harness 主循环、轨迹实时透传的插件。
 
+## Worktree development
+
+所有开发（代码与文档改动）必须在 git worktree 中进行，禁止直接在 `main`（或默认分支）上提交。开始改动前先创建 worktree——用 `EnterWorktree` 工具或 `git worktree add` 切到独立工作树与分支；在 worktree 内开发、测试、提交，完成后合并回 `main`。
+
 ## Documentation sync
 
 After making a large/logic change — anything that alters what a doc under
