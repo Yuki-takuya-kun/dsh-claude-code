@@ -1,5 +1,9 @@
 # Documentation Update Log
 
+## 2026-08-17
+
+* **Update**: `lib/trace.mjs` 新增工具名归一化——Claude Code 内建工具名（`Bash`/`Skill`/`Read`/`Write`/`Edit`/`Glob`/`Grep`/`WebFetch`/`WebSearch`…）映射成 DSH wire 工具名（`bash`/`skill`/`read`/…），让 DSH 前端按类别渲染而非全部落进通用 "Tool call"；`Skill` 入参 `{ command }` 改写为 `{ name }`。同步 [事件映射](/reference/event-mapping.md) 与单测 `test/trace.test.mjs`。
+
 ## 2026-08-16
 
 * **Update**: README 重构为中英双语——`README.md` 改为中文默认版（Hero + 能干什么 + 一句话），英文迁至 `README_EN.md`，双向互链；删「预发布」警告、术语降噪。删除 [项目总览](/overview/project-overview.md) 的「状态」段。

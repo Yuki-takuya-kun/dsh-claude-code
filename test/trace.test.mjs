@@ -1,7 +1,7 @@
 // test/trace.test.mjs — trace.mjs 的纯单测（mock sink，不依赖宿主运行时）。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ClaudeRunTracer } from "../lib/trace.mjs";
+import { ClaudeRunTracer, mapToolName, mapToolInput } from "../lib/trace.mjs";
 
 function mockSink() {
   const events = [];
@@ -62,7 +62,7 @@ test("tool-call run maps tool/call + tool/result with sourceEventSeqs link", () 
 
   const call = sink.events.find((e) => e.type === "tool/call");
   assert.equal(call.data.callId, "toolu_1");
-  assert.equal(call.data.name, "Bash");
+  assert.equal(call.data.name, "bash");
   assert.equal(call.data.arguments, '{"command":"ls"}');
 
   const result = sink.events.find((e) => e.type === "tool/result");
@@ -84,4 +84,48 @@ test("prompt-echo user message (non tool_result) is ignored", () => {
   t.finish();
   const types = sink.events.map((e) => e.type);
   assert.deepEqual(types, ["step/start", "assistant/message", "step/end"]);
+});
+
+test("Claude tool names map to DSH wire names in tool/call", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "assistant", message: { content: [
+    { type: "tool_use", id: "toolu_a", name: "Bash", input: { command: "ls" } },
+    { type: "tool_use", id: "toolu_b", name: "Read", input: { file_path: "a.txt" } },
+    { type: "tool_use", id: "toolu_c", name: "WebSearch", input: { query: "q" } },
+    { type: "tool_use", id: "toolu_d", name: "TodoWrite", input: { todos: [] } },
+  ], model: "claude-sonnet-4-5" } });
+  t.finish();
+
+  const calls = sink.events.filter((e) => e.type === "tool/call");
+  const names = new Map(calls.map((c) => [c.data.callId, c.data.name]));
+  assert.equal(names.get("toolu_a"), "bash");
+  assert.equal(names.get("toolu_b"), "read");
+  assert.equal(names.get("toolu_c"), "web_search");
+  // 未在映射表内的工具保持原名，走通用卡片
+  assert.equal(names.get("toolu_d"), "TodoWrite");
+});
+
+test("Skill tool input { command } remaps to { name }", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "assistant", message: { content: [
+    { type: "tool_use", id: "toolu_s", name: "Skill", input: { command: "mattpocock-tdd" } },
+  ], model: "claude-sonnet-4-5" } });
+  t.finish();
+
+  const call = sink.events.find((e) => e.type === "tool/call");
+  assert.equal(call.data.name, "skill");
+  assert.equal(call.data.arguments, '{"name":"mattpocock-tdd"}');
+});
+
+test("mapToolName / mapToolInput map tables", () => {
+  assert.equal(mapToolName("Bash"), "bash");
+  assert.equal(mapToolName("Skill"), "skill");
+  assert.equal(mapToolName("MultiEdit"), "edit");
+  assert.equal(mapToolName("UnknownTool"), "UnknownTool");
+  assert.deepEqual(mapToolInput("Skill", { command: "x" }), { name: "x" });
+  // 非 { command } 入参原样返回
+  assert.deepEqual(mapToolInput("Skill", { name: "already" }), { name: "already" });
+  assert.deepEqual(mapToolInput("Bash", { command: "ls" }), { command: "ls" });
 });

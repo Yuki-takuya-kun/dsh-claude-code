@@ -21,6 +21,24 @@ timestamp: 2026-08-14
 | result · success | turn/end (completed) |
 | result · error | turn/end (error) |
 
+# 工具名归一化
+
+DSH 前端按 **wire 工具名** 分类渲染工具卡片（`bash`/`skill`/`read`/`write`/`edit`/`grep`/`glob`/`web_fetch`/`web_search`…），名字对不上就落进通用 "Tool call" 卡片。Claude Code 内建工具名是 PascalCase（`Bash`、`Skill`、`Read`…），所以转写 `tool/call` 时做一次性映射（见 `lib/trace.mjs` 的 `TOOL_NAME_MAP`）：
+
+| Claude Code 工具名 | DSH wire 工具名 |
+|---|---|
+| Bash | bash |
+| Skill | skill |
+| Read | read |
+| Write | write |
+| Edit / MultiEdit | edit |
+| Glob | glob |
+| Grep | grep |
+| WebFetch | web_fetch |
+| WebSearch / WebSearch2 | web_search |
+
+不在表内的工具保持原名（走通用卡片）。此外 `Skill` 的入参由 Claude 的 `{ command }` 改写为 DSH skill 行读取的 `{ name }`（`TOOL_INPUT_REMAP`），否则 skill 卡片只能显示原始 JSON 而非 skill 名。
+
 # step 边界
 
 Claude Code 一次 API 轮（一个 assistant 消息）≈ DSH 一个 step（step/start → … → step/end）。
