@@ -2,6 +2,8 @@
 
 ## 2026-08-17
 
+* **Fix**: 权限改为每次工具调用重读会话 `sandbox/mode` + `approval/policy`（`lib/approval.mjs` 的 `canUseTool` 不再闭包回合起点算好的 strategy），回合中切到 Full access（danger-full-access）或 never 立即生效；`lib/driver.mjs` 仅在回合起点已是 danger-full-access 时设 `permissionMode: bypassPermissions`，其余策略统一走 `canUseTool`。新增 `test/approval.test.mjs`。同步 [架构](/overview/architecture.md)。
+
 * **Update**: `lib/trace.mjs` 新增工具名归一化——Claude Code 内建工具名（`Bash`/`Skill`/`Read`/`Write`/`Edit`/`Glob`/`Grep`/`WebFetch`/`WebSearch`…）映射成 DSH wire 工具名（`bash`/`skill`/`read`/…），让 DSH 前端按类别渲染而非全部落进通用 "Tool call"；`Skill` 入参 `{ command }` 改写为 `{ name }`。同步 [事件映射](/reference/event-mapping.md) 与单测 `test/trace.test.mjs`。
 
 ## 2026-08-16
