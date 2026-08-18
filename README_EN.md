@@ -63,6 +63,7 @@ These are options for the claude-code engine, written under dsh-engine-switch's 
 | persistSession | true | reuse the same Claude session across turns |
 | includePartialMessages | true | token-level streaming |
 | env | {} | extra env (e.g. ANTHROPIC_API_KEY) |
+| contextWindow | unset | manually set the model context window (tokens), fallback when auto-detection yields nothing |
 
 ## 🔍 How it works (optional)
 

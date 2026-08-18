@@ -63,6 +63,7 @@ dsh plugin --profile web add github:Yuki-takuya-kun/dsh-engine-switch \
 | persistSession | true | 跨轮复用同一个 Claude 会话 |
 | includePartialMessages | true | token 级流式输出 |
 | env | {} | 额外环境变量（如 ANTHROPIC_API_KEY） |
+| contextWindow | 未配置 | 手动指定模型上下文窗口（token 数），自动取不到时兜底 |
 
 ## 🔍 原理（可选阅读）
 

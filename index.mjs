@@ -19,6 +19,8 @@ const DEFAULTS = {
   persistSession: true,
   includePartialMessages: true,
   env: {},
+  // 可选：手动指定模型上下文窗口（token 数）。result.modelUsage 取不到时兜底。
+  contextWindow: undefined,
 };
 
 const claudeCodeEngine = {

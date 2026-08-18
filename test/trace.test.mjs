@@ -1,7 +1,7 @@
 // test/trace.test.mjs — trace.mjs 的纯单测（mock sink，不依赖宿主运行时）。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ClaudeRunTracer, mapToolName, mapToolInput, usageFromClaude, contextWindowOf } from "../lib/trace.mjs";
+import { ClaudeRunTracer, mapToolName, mapToolInput, usageFromClaude, contextWindowOf, isZeroUsage } from "../lib/trace.mjs";
 
 function mockSink() {
   const events = [];
@@ -215,4 +215,86 @@ test("contextWindowOf picks primary model then sole entry, positive only", () =>
   assert.equal(contextWindowOf({ m: { contextWindow: -1 } }, "m"), undefined);
   assert.equal(contextWindowOf(undefined, "m"), undefined);
   assert.equal(contextWindowOf({}, "m"), undefined);
+});
+
+test("contextWindowOf matches canonicalModel and falls back to any positive entry", () => {
+  // 主模型 key 不匹配，但 canonicalModel 命中
+  assert.equal(contextWindowOf(
+    { "claude-opus-4-7": { contextWindow: 1000000, canonicalModel: "claude-sonnet-4-5" } },
+    "claude-sonnet-4-5",
+  ), 1000000);
+  // 多条且都不匹配 key/canonicalModel → 退回任意带正 contextWindow 的条目
+  assert.equal(contextWindowOf(
+    {
+      "claude-opus-4-7": { contextWindow: 1000000 },
+      "claude-haiku-4-5": { contextWindow: 200000 },
+    },
+    "unknown-model",
+  ), 1000000);
+});
+
+test("isZeroUsage detects null and all-zero buckets", () => {
+  assert.equal(isZeroUsage(null), true);
+  assert.equal(isZeroUsage({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }), true);
+  assert.equal(isZeroUsage({ inputTokens: 1, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }), false);
+  assert.equal(isZeroUsage({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1 }), false);
+});
+
+test("result.usage fills in a usage chunk when stream usage is empty", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  // message_start 只给空 usage → 本轮 assistant/message 挂 0 用量
+  t.handleMessage({ type: "stream_event", event: { type: "message_start", message: {
+    model: "deepseek-v4-pro",
+    usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+  } } });
+  t.handleMessage({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } });
+  t.handleMessage({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hi" } } });
+  t.handleMessage({ type: "assistant", message: { content: [{ type: "text", text: "Hi" }] } });
+  // result 给出权威总用量 → 应补一个 usage chunk 兜底
+  t.handleMessage({ type: "result", subtype: "success", is_error: false, result: "Hi",
+    usage: { input_tokens: 120, output_tokens: 55, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 } });
+  t.finish();
+
+  const usageChunks = sink.events.filter((e) => e.type === "assistant/chunk" && e.data.chunk.type === "usage");
+  assert.equal(usageChunks.length, 1);
+  assert.deepEqual(usageChunks[0].data.chunk.usage, {
+    inputTokens: 120,
+    outputTokens: 55,
+    cacheReadTokens: 40,
+    cacheWriteTokens: 30,
+  });
+});
+
+test("result.usage does not add a usage chunk when stream usage is non-empty", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "stream_event", event: { type: "message_start", message: {
+    model: "claude-sonnet-4-5",
+    usage: { input_tokens: 120, output_tokens: 0, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 },
+  } } });
+  t.handleMessage({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 55 } } });
+  t.handleMessage({ type: "assistant", message: { content: [{ type: "text", text: "Hi" }] } });
+  t.handleMessage({ type: "result", subtype: "success", is_error: false, result: "Hi",
+    usage: { input_tokens: 120, output_tokens: 55, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 } });
+  t.finish();
+
+  const usageChunks = sink.events.filter((e) => e.type === "assistant/chunk" && e.data.chunk.type === "usage");
+  assert.equal(usageChunks.length, 0);
+  // 本步 assistant/message 直接带上了非零用量
+  const msg = sink.events.find((e) => e.type === "assistant/message");
+  assert.deepEqual(msg.data.usage, { inputTokens: 120, outputTokens: 55, cacheReadTokens: 40, cacheWriteTokens: 30 });
+});
+
+test("config contextWindow is used as fallback when modelUsage is empty", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1, { contextWindow: 1000000 });
+  t.handleMessage({ type: "system", subtype: "init", model: "deepseek-v4-pro" });
+  t.handleMessage({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } });
+  t.handleMessage({ type: "result", subtype: "success", is_error: false, result: "hi", modelUsage: {} });
+  t.finish();
+
+  const ctx = sink.events.find((e) => e.type === "request/context");
+  assert.ok(ctx);
+  assert.deepEqual(ctx.data, { provider: "claude-code", model: "deepseek-v4-pro", contextWindow: 1000000 });
 });
