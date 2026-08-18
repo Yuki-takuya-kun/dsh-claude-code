@@ -37,5 +37,5 @@ timestamp: 2026-08-14
 # 注意
 
 - executable 含路径分隔符时按绝对/相对路径直接使用，否则按 PATH 解析。
-- env 是「整体替换」子进程环境，插件会合并 scrubbedParentEnv() 后再叠加 env。
+- env 是「整体替换」子进程环境，插件会合并 scrubbedParentEnv() 后再补回父环境的 `ANTHROPIC_*`（凭据/端点），最后叠加 env——`ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_BASE_URL` 等代理认证变量无需手动写在 env 里。
 - Claude 会话 id 持久化在 `~/.dsh/dsh-claude-code/sessions.json`（可用 `DSH_CLAUDE_CODE_STORE` 覆盖根目录），因 DSH session header 是白名单 schema，塞不进自定义字段。

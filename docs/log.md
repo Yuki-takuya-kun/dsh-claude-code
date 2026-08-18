@@ -2,6 +2,8 @@
 
 ## 2026-08-18
 
+* **Fix**: 用量仍为 0 的另一半原因在子进程 env——`lib/auth.mjs` 的 `scrubbedParentEnv()` 会剥掉名字含 KEY/TOKEN 的 `ANTHROPIC_*`（`ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY`），代理端点缺了凭据就把 usage 全报 0、`modelUsage` 也给不出 `contextWindow`。改为 scrub 后补回父环境的 `ANTHROPIC_*`，再由 `config.env` 覆盖。新增 `test/auth.test.mjs`。同步 [配置](/reference/config.md)。
+
 * **Fix**: 用量仍然不显示——实测 SDK 的流式事件里 `message_start` 的 usage 全为 0、且 `message.model` 是去后缀短名（与 `system/init` 和 `modelUsage` 的 key 不符），权威用量在 `message_delta`，而它排在 `assistant` 消息之后。改为：忽略 `message_start`（不再污染 `#usage` 与 `#model`），`message_delta` 的完整 `TokenUsage` 写成 `assistant/chunk`（`usage` 类型）而非挂在 `assistant/message` 上；`request/context` 的 model 用 `system/init` 的全名。同步 [事件映射](/reference/event-mapping.md)、[架构](/overview/architecture.md) 与单测 `test/trace.test.mjs`。
 
 * **Fix**: 上下文用量在某些后端（经 Anthropic 兼容端点接入的非 Claude 模型）为全 0、且 `request/context` 取不到——流式 `message_start`/`message_delta` 不带用量、`result.modelUsage` 也不给 `contextWindow`。改为：`result` 消息的权威 `usage` 在每步流式用量为空时补一个 `assistant/chunk`（usage 类型）兜底；`contextWindow` 匹配顺序扩展为 key → `canonicalModel` → 任意正数条目，并新增引擎配置 `contextWindow` 手动兜底。同步 [事件映射](/reference/event-mapping.md)、[配置](/reference/config.md)、README 与单测。
