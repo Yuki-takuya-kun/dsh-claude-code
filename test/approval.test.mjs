@@ -65,23 +65,36 @@ test("canUseTool: 回合中切到 danger-full-access 后，后续调用直接放
   assert.deepEqual(asked, ["Bash"], "切换后不应再发起审批请求");
 });
 
-test("canUseTool: 回合中切到 never 后，区外调用按 no-prompt 拒绝", async () => {
+test("canUseTool: approval policy 从 ask 切到 never 后，区外调用改为 no-prompt 拒绝且不再发起审批", async () => {
   const events = [
     { type: "sandbox/mode", data: { mode: "workspace-write" } },
     { type: "approval/policy", data: { policy: "ask" } },
   ];
-  const approval = { request: async () => "allowed-once" };
+  const asked = [];
+  const approval = {
+    request: async (req) => {
+      asked.push(req.toolName);
+      return "allowed-once";
+    },
+  };
   const canUseTool = makeCanUseTool(makeCtx(approval), {
     cwd: "/tmp/ws",
     session: { events },
     agent: { id: "a" },
   });
 
+  // 仍是 ask：区外调用走审批 seam
+  const before = await canUseTool("Bash", { command: "cat /etc/hostname" }, {});
+  assert.equal(before.behavior, "allow");
+  assert.deepEqual(asked, ["Bash"]);
+
+  // 用户把 approval policy 从 ask 改为 never
   events.push({ type: "approval/policy", data: { policy: "never" } });
 
-  const result = await canUseTool("Bash", { command: "cat /etc/hostname" }, {});
-  assert.equal(result.behavior, "deny");
-  assert.match(result.message, /denied by approval policy \(never\)/);
+  const after = await canUseTool("Bash", { command: "cat /etc/hostname" }, {});
+  assert.equal(after.behavior, "deny");
+  assert.match(after.message, /denied by approval policy \(never\)/);
+  assert.deepEqual(asked, ["Bash"], "切到 never 后不应再发起审批请求");
 });
 
 test("canUseTool: 工作区内的路径在 workspace-write 下直接放行", async () => {
