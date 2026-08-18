@@ -17,6 +17,7 @@
 
 - **🎯 一键接入 Claude Code**：注册一个 `claude-code` 引擎（`ClaudeCodeAgent` + 预设），交给 [dsh-engine-switch](https://github.com/Yuki-takuya-kun/dsh-engine-switch) 按预设路由，零配置自动对上。
 - **📡 轨迹实时可见**：文本、思考、工具调用与结果，每一步都实时流进 DSH 会话。
+- **📊 上下文占用可见**：把 Claude Code 的 token 用量与模型上下文窗口写进 DSH 会话日志（`TokenUsage` + `request/context`），像 DSH 原生一样在界面显示上下文占用比例。
 - **🔐 权限桥接**：DSH 的沙箱模式 + 审批策略，映射到 Claude 的权限回调（工作区内写放行、区外弹审批）；`AskUserQuestion` 用 DSH 的选择题 UI 作答。
 - **🧰 工具与沙箱都来自 Claude Code**：预设只当路由键，不把 DSH 的 persona / 工具透传过去。
 - **⏯️ 精确续接**：Claude 会话 id 旁路持久化，续聊接回同一个 Claude 会话。

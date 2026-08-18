@@ -1,5 +1,9 @@
 # Documentation Update Log
 
+## 2026-08-18
+
+* **Feature**: 添加上下文长度监控——`lib/trace.mjs` 把 Claude SDK 的用量补进 DSH 会话日志：`message_start`/`message_delta` 合成 `TokenUsage` 挂在每步 `assistant/message`，`result.modelUsage` 的 `contextWindow` 映射成 `request/context`（经 sink 的 `requestContext()` 去重），token-meter 据此折叠出 `contextPressure`，Web 界面像 DSH 原生一样显示上下文占用比例。`lib/driver.mjs` 的 sink 补 `requestContext()`。同步 [事件映射](/reference/event-mapping.md)、[架构](/overview/architecture.md)、README 与单测 `test/trace.test.mjs`。
+
 ## 2026-08-17
 
 * **Fix**: 权限改为每次工具调用重读会话 `sandbox/mode` + `approval/policy`（`lib/approval.mjs` 的 `canUseTool` 不再闭包回合起点算好的 strategy），回合中切到 Full access（danger-full-access）或 never 立即生效；`lib/driver.mjs` 仅在回合起点已是 danger-full-access 时设 `permissionMode: bypassPermissions`，其余策略统一走 `canUseTool`。新增 `test/approval.test.mjs`。同步 [架构](/overview/architecture.md)。

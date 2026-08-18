@@ -15,11 +15,23 @@ timestamp: 2026-08-14
 | stream_event · content_block_delta(text) | assistant/chunk (text-delta) |
 | stream_event · content_block_delta(thinking) | assistant/chunk (reasoning-delta) |
 | stream_event · content_block_delta(input_json) | assistant/chunk (tool-call-delta) |
-| assistant（完整一轮） | assistant/message |
+| stream_event · message_start | 记录主模型 + 输入侧 usage（input/cache） |
+| stream_event · message_delta | 定稿输出 usage |
+| assistant（完整一轮） | assistant/message（含该步 usage） |
 | assistant 内 tool_use 块 | tool/call |
 | user 内 tool_result 块 | tool/result |
+| result · modelUsage | request/context（provider/model/contextWindow） |
 | result · success | turn/end (completed) |
 | result · error | turn/end (error) |
+
+# 上下文长度监控
+
+DSH 原生靠 `ctx.tokenMeter` 从会话日志折叠出 `tokenUsage` / `contextPressure` 投影，Web 界面据此显示上下文占用比例（`projectedTokens / contextWindow`）。dsh-claude-code 的驱动换成了 Claude Code，不经过 `ctx.llm.stream()`，所以由 `lib/trace.mjs` 把 Claude SDK 的用量信息补进同一批会话事件：
+
+- **用量（分子）**：`message_start` 携带该次 API 请求的输入侧用量（`input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`），`message_delta` 定稿输出（`output_tokens`）。二者合成 DSH `TokenUsage`（`cache_creation_input_tokens` → `cacheWriteTokens`、`cache_read_input_tokens` → `cacheReadTokens`），随该步的 `assistant/message` 一并入账。token-meter 据此推进 `pressureTokens` / `projectedTokens`。
+- **容量（分母）**：`result` 消息的 `modelUsage`（`Record<model, ModelUsage>`）才带有 `contextWindow`，映射成 `request/context` 事件（`{ provider: "claude-code", model, contextWindow }`），且仅在 provider/model/contextWindow 变化时写入（经 sink 的 `requestContext()` 去重）。因为 Claude 的容量要等第一次 query 结束才可知，所以首轮结束前没有占用比例，之后每个回合末尾刷新一次。
+
+用法与 DSH 原生一致：占用比例是面向用户的参考数字，不是计费记录；token-meter 会像折叠原生日志一样折叠这些事件。
 
 # 工具名归一化
 

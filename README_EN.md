@@ -17,6 +17,7 @@
 
 - **🎯 Plug Claude Code in**: registers a `claude-code` engine (`ClaudeCodeAgent` + preset), routed by [dsh-engine-switch](https://github.com/Yuki-takuya-kun/dsh-engine-switch) with zero config.
 - **📡 Live trajectory**: text, thinking, tool calls and results stream into the DSH session in real time.
+- **📊 Visible context usage**: Claude Code's token usage and model context window are written into the DSH session log (`TokenUsage` + `request/context`), so the UI shows the context-usage ratio just like DSH native.
 - **🔐 Permission bridge**: DSH's sandbox mode + approval policy map onto Claude's permission callback (in-workspace edits allowed, outside prompts for approval); `AskUserQuestion` is answered through DSH's choice UI.
 - **🧰 Tools and sandbox come from Claude Code**: the preset is only a routing key — DSH's persona / tools are not forwarded.
 - **⏯️ Precise resume**: the Claude session id is side-persisted, so continuing a session reuses the same Claude session.
