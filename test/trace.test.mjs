@@ -130,28 +130,50 @@ test("mapToolName / mapToolInput map tables", () => {
   assert.deepEqual(mapToolInput("Bash", { command: "ls" }), { command: "ls" });
 });
 
-test("usage from message_start + message_delta lands on assistant/message", () => {
+test("message_delta emits a usage chunk; message_start is ignored", () => {
   const sink = mockSink();
   const t = new ClaudeRunTracer(sink, 1);
+  // message_start 的 usage 与 model 都被忽略：兼容端点上 usage 全为 0、model 是去后缀短名
   t.handleMessage({ type: "stream_event", event: { type: "message_start", message: {
-    model: "claude-sonnet-4-5",
-    usage: { input_tokens: 120, output_tokens: 0, cache_creation_input_tokens: 30, cache_read_input_tokens: 40 },
+    model: "short-model-name",
+    usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
   } } });
   t.handleMessage({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } });
   t.handleMessage({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hi" } } });
-  t.handleMessage({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 55 } } });
+  // assistant 先到，usage 还不确定，所以不挂在 assistant/message 上
   t.handleMessage({ type: "assistant", message: { content: [{ type: "text", text: "Hi" }], model: "claude-sonnet-4-5" } });
+  // message_delta 在 assistant 之后到，是权威定稿用量 → 写成 usage chunk
+  t.handleMessage({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: "end_turn" },
+    usage: { input_tokens: 120, output_tokens: 55, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 } } });
   t.handleMessage({ type: "result", subtype: "success", is_error: false, result: "Hi" });
   t.finish();
 
-  const msg = sink.events.find((e) => e.type === "assistant/message");
-  // 输入/缓存来自 message_start，输出在 message_delta 定稿
-  assert.deepEqual(msg.data.usage, {
+  const usageChunks = sink.events.filter((e) => e.type === "assistant/chunk" && e.data.chunk.type === "usage");
+  assert.equal(usageChunks.length, 1);
+  assert.deepEqual(usageChunks[0].data.chunk.usage, {
     inputTokens: 120,
     outputTokens: 55,
     cacheReadTokens: 40,
     cacheWriteTokens: 30,
   });
+});
+
+test("message_start does not overwrite the model from system/init", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "system", subtype: "init", model: "deepseek-v4-pro[1m]" });
+  t.handleMessage({ type: "stream_event", event: { type: "message_start", message: {
+    model: "deepseek-v4-pro",
+    usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+  } } });
+  t.handleMessage({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } });
+  t.handleMessage({ type: "result", subtype: "success", is_error: false, result: "hi",
+    modelUsage: { "deepseek-v4-pro[1m]": { contextWindow: 1000000 } } });
+  t.finish();
+
+  // request/context 用 init 的全名 model（与 modelUsage 的 key 一致）
+  const ctx = sink.events.find((e) => e.type === "request/context");
+  assert.deepEqual(ctx.data, { provider: "claude-code", model: "deepseek-v4-pro[1m]", contextWindow: 1000000 });
 });
 
 test("result.modelUsage emits request/context with the context window", () => {
@@ -266,24 +288,21 @@ test("result.usage fills in a usage chunk when stream usage is empty", () => {
   });
 });
 
-test("result.usage does not add a usage chunk when stream usage is non-empty", () => {
+test("result.usage does not add a usage chunk when message_delta already provided one", () => {
   const sink = mockSink();
   const t = new ClaudeRunTracer(sink, 1);
-  t.handleMessage({ type: "stream_event", event: { type: "message_start", message: {
-    model: "claude-sonnet-4-5",
-    usage: { input_tokens: 120, output_tokens: 0, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 },
-  } } });
-  t.handleMessage({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 55 } } });
+  t.handleMessage({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } });
   t.handleMessage({ type: "assistant", message: { content: [{ type: "text", text: "Hi" }] } });
+  t.handleMessage({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: "end_turn" },
+    usage: { input_tokens: 120, output_tokens: 55, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 } } });
   t.handleMessage({ type: "result", subtype: "success", is_error: false, result: "Hi",
     usage: { input_tokens: 120, output_tokens: 55, cache_read_input_tokens: 40, cache_creation_input_tokens: 30 } });
   t.finish();
 
+  // message_delta 已写了 usage chunk，result 不再补第二个
   const usageChunks = sink.events.filter((e) => e.type === "assistant/chunk" && e.data.chunk.type === "usage");
-  assert.equal(usageChunks.length, 0);
-  // 本步 assistant/message 直接带上了非零用量
-  const msg = sink.events.find((e) => e.type === "assistant/message");
-  assert.deepEqual(msg.data.usage, { inputTokens: 120, outputTokens: 55, cacheReadTokens: 40, cacheWriteTokens: 30 });
+  assert.equal(usageChunks.length, 1);
+  assert.deepEqual(usageChunks[0].data.chunk.usage, { inputTokens: 120, outputTokens: 55, cacheReadTokens: 40, cacheWriteTokens: 30 });
 });
 
 test("config contextWindow is used as fallback when modelUsage is empty", () => {

@@ -15,9 +15,9 @@ timestamp: 2026-08-14
 | stream_event · content_block_delta(text) | assistant/chunk (text-delta) |
 | stream_event · content_block_delta(thinking) | assistant/chunk (reasoning-delta) |
 | stream_event · content_block_delta(input_json) | assistant/chunk (tool-call-delta) |
-| stream_event · message_start | 记录主模型 + 输入侧 usage（input/cache） |
-| stream_event · message_delta | 定稿输出 usage |
-| assistant（完整一轮） | assistant/message（含该步 usage） |
+| stream_event · message_start | 忽略（usage 全 0、model 是去后缀短名） |
+| stream_event · message_delta | assistant/chunk (usage 类型) —— 权威定稿用量 |
+| assistant（完整一轮） | assistant/message（不带 usage） |
 | assistant 内 tool_use 块 | tool/call |
 | user 内 tool_result 块 | tool/result |
 | result · modelUsage | request/context（provider/model/contextWindow） |
@@ -28,7 +28,7 @@ timestamp: 2026-08-14
 
 DSH 原生靠 `ctx.tokenMeter` 从会话日志折叠出 `tokenUsage` / `contextPressure` 投影，Web 界面据此显示上下文占用比例（`projectedTokens / contextWindow`）。dsh-claude-code 的驱动换成了 Claude Code，不经过 `ctx.llm.stream()`，所以由 `lib/trace.mjs` 把 Claude SDK 的用量信息补进同一批会话事件：
 
-- **用量（分子）**：优先用 `message_start`（输入侧 `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`）与 `message_delta`（定稿 `output_tokens`）合成每步的 DSH `TokenUsage`（`cache_creation_input_tokens` → `cacheWriteTokens`、`cache_read_input_tokens` → `cacheReadTokens`），随该步的 `assistant/message` 入账。某些后端（如经 Anthropic 兼容端点接入的非 Claude 模型）流式消息不带用量，此时退回 `result` 消息的权威总用量 `result.usage`，补一个 `assistant/chunk`（`usage` 类型）兜底，保证 `pressureTokens` / `projectedTokens` 有值。
+- **用量（分子）**：SDK 的流式事件里，`message_start` 的 usage 全为 0（且其 `message.model` 是去后缀短名，与 `system/init` / `modelUsage` 的 key 不符），所以忽略它；权威用量在 `message_delta`——它在 `assistant` 消息之后才到，携带该次请求的 `input_tokens` + `output_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`，映射成 DSH `TokenUsage`（`cache_creation_input_tokens` → `cacheWriteTokens`、`cache_read_input_tokens` → `cacheReadTokens`）后写成一个 `assistant/chunk`（`usage` 类型）。某些后端流式消息完全不携带用量时，退回 `result.usage`（该次 query 的总用量）补一个 `usage` chunk 兜底，保证 `pressureTokens` / `projectedTokens` 有值。
 - **容量（分母）**：`result` 消息的 `modelUsage`（`Record<model, ModelUsage>`）带有 `contextWindow`，映射成 `request/context` 事件（`{ provider: "claude-code", model, contextWindow }`），且仅在 provider/model/contextWindow 变化时写入（经 sink 的 `requestContext()` 去重）。取不到时退回引擎配置 `config.contextWindow`。因为 Claude 的容量要等第一次 query 结束才可知，所以首轮结束前没有占用比例，之后每个回合末尾刷新一次。
 
 用法与 DSH 原生一致：占用比例是面向用户的参考数字，不是计费记录；token-meter 会像折叠原生日志一样折叠这些事件。
