@@ -28,13 +28,61 @@ test("text-only run maps to one step", () => {
   t.finish();
 
   const types = sink.events.map((e) => e.type);
-  assert.deepEqual(types, ["step/start", "assistant/chunk", "assistant/chunk", "assistant/chunk", "assistant/message", "step/end"]);
+  assert.deepEqual(types, ["request/header", "step/start", "assistant/chunk", "assistant/chunk", "assistant/chunk", "assistant/message", "step/end"]);
 
   const msg = sink.events.find((e) => e.type === "assistant/message");
   assert.equal(msg.data.message.source.provider, "claude-code");
   assert.equal(msg.data.message.source.model, "claude-sonnet-4-5");
   assert.deepEqual(msg.data.message.content, [{ type: "text", text: "Hello world" }]);
   assert.equal(msg.surfaceOp, "append");
+});
+
+test("system/init emits request/header with config + system stub + tools", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "system", subtype: "init", model: "claude-sonnet-4-5", tools: ["Bash", "Read"] });
+  t.finish();
+
+  const header = sink.events.find((e) => e.type === "request/header");
+  assert.ok(header);
+  assert.equal(header.data.reason, "initial");
+  assert.deepEqual(header.data.header.config, { provider: "claude-code", model: "claude-sonnet-4-5" });
+  assert.equal(typeof header.data.header.system, "string");
+  assert.ok(header.data.header.system.length > 0);
+  assert.deepEqual(header.data.header.tools, [
+    { name: "Bash", description: "", parameters: {} },
+    { name: "Read", description: "", parameters: {} },
+  ]);
+});
+
+test("request/header re-emits only when model or tools change", () => {
+  const sink = mockSink();
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "system", subtype: "init", model: "claude-sonnet-4-5", tools: ["Bash"] });
+  // 同一轮 query 重复 init（session 复用）且 header 未变 → 不重复写
+  t.handleMessage({ type: "system", subtype: "init", model: "claude-sonnet-4-5", tools: ["Bash"] });
+  // 切模型 → 写一条 change
+  t.handleMessage({ type: "system", subtype: "init", model: "claude-opus-4-5", tools: ["Bash"] });
+  t.finish();
+
+  const headers = sink.events.filter((e) => e.type === "request/header");
+  assert.deepEqual(headers.map((e) => e.data.reason), ["initial", "change"]);
+  assert.equal(headers[1].data.header.config.model, "claude-opus-4-5");
+});
+
+test("request/header skips emission when the session already folded the same header", () => {
+  const sink = mockSink();
+  // 会话里已有相同 header（跨轮复用）→ 新 tracer 实例不再重复写 "initial"
+  sink.requestHeader = () => ({
+    config: { provider: "claude-code", model: "claude-sonnet-4-5" },
+    system: "Claude Code 内置系统提示词（含工具说明与环境信息；原文由 claude CLI 内部生成，SDK 不暴露）",
+    tools: [{ name: "Bash", description: "", parameters: {} }],
+  });
+  const t = new ClaudeRunTracer(sink, 1);
+  t.handleMessage({ type: "system", subtype: "init", model: "claude-sonnet-4-5", tools: ["Bash"] });
+  t.finish();
+
+  assert.equal(sink.events.filter((e) => e.type === "request/header").length, 0);
 });
 
 test("tool-call run maps tool/call + tool/result with sourceEventSeqs link", () => {
