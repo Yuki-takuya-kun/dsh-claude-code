@@ -2,6 +2,8 @@
 
 ## 2026-08-18
 
+* **Fix**: 切到 Full access 会触发模型抢跑——DSH 的 `user-approval.setPolicy` 在审批策略变化时 `agent.inject()` 一条「approval policy changed」上下文消息（进 `next-step`），而 `ClaudeCodeAgent.drive()` 用 `hasPending`（`next-turn` **或** `next-step`）作为开回合条件，导致这条注入消息被当成一条新用户消息喂给 Claude Code，模型以为用户回复了、没等真实回复就执行下一步。改为只按 `nextTurn.length > 0` 开回合：注入消息留在 `next-step`，等下一个真实用户回合 `claim("next-turn")` 时一起排空、作为前缀并入提示词。同步 [架构](/overview/architecture.md)。
+
 * **Fix**: 用量仍为 0 的另一半原因在子进程 env——`lib/auth.mjs` 的 `scrubbedParentEnv()` 会剥掉名字含 KEY/TOKEN 的 `ANTHROPIC_*`（`ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY`），代理端点缺了凭据就把 usage 全报 0、`modelUsage` 也给不出 `contextWindow`。改为 scrub 后补回父环境的 `ANTHROPIC_*`，再由 `config.env` 覆盖。新增 `test/auth.test.mjs`。同步 [配置](/reference/config.md)。
 
 * **Fix**: 用量仍然不显示——实测 SDK 的流式事件里 `message_start` 的 usage 全为 0、且 `message.model` 是去后缀短名（与 `system/init` 和 `modelUsage` 的 key 不符），权威用量在 `message_delta`，而它排在 `assistant` 消息之后。改为：忽略 `message_start`（不再污染 `#usage` 与 `#model`），`message_delta` 的完整 `TokenUsage` 写成 `assistant/chunk`（`usage` 类型）而非挂在 `assistant/message` 上；`request/context` 的 model 用 `system/init` 的全名。同步 [事件映射](/reference/event-mapping.md)、[架构](/overview/architecture.md) 与单测 `test/trace.test.mjs`。
