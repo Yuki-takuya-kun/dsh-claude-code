@@ -62,6 +62,7 @@ These are options for the claude-code engine, written under dsh-engine-switch's 
 | executable | "claude" | Claude Code executable (path or PATH name) |
 | persistSession | true | reuse the same Claude session across turns |
 | includePartialMessages | true | token-level streaming |
+| traceSubagents | true | trace Claude Code's internal subagents (Agent/Task tools) as standalone read-only DSH child sessions |
 | env | {} | extra env (e.g. ANTHROPIC_API_KEY) |
 | contextWindow | unset | manually set the model context window (tokens), fallback when auto-detection yields nothing |
 

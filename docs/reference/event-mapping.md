@@ -56,7 +56,21 @@ DSH 前端按 **wire 工具名** 分类渲染工具卡片（`bash`/`skill`/`read
 
 Claude Code 一次 API 轮（一个 assistant 消息）≈ DSH 一个 step（step/start → … → step/end）。
 
+# 子代理映射
+
+Claude Code 内部子代理由 **Agent 工具**（旧名 Task）spawn。开启 `traceSubagents`（默认）时，每个子代理被追踪为独立只读 DSH 子 session，而不是混进主轨迹：
+
+| Claude SDK 事件/块 | 去向 |
+|---|---|
+| 主线程 assistant 内 `tool_use`（名 `Agent`/`Task`） | 建子 session（`subagent/descriptor` + `turn/start`）；主轨迹里同时映射成 wire 名 `subagent` 的「发起委派」卡片 |
+| 带 `parent_tool_use_id` 的 assistant/user/stream_event/tool_progress | 子 session 轨迹（复用 ClaudeRunTracer，按 `parent_tool_use_id` 归位） |
+| 主线程 user 内 `tool_result`（`tool_use_id` 命中） | 子 session `turn/end`（`is_error` → error，否则 completed）；前台当轮、后台跨轮 |
+| system · task_started / task_progress / task_updated / task_notification | 只消费不驱动（旧 Task 工具的生命周期事件，Agent 工具可能不发；`task_notification` 存在时作后台收尾兜底） |
+
+子 session 以 `origin:'subagent'` + `parentSession` + `delegationDepth` + `subagent/descriptor`（provider `claude-code`、mode `one-shot`、label 取 Agent 工具的 `description`）写入，UI 经 lineage 树展示（子发现读 `origin==='subagent' && parentId===parentSession`），与 DSH 原生子代理显示一致。子 session 只读、不可续跑，完成后 detach 成 persistence-only。
+
 # 关键选项
 
 - includePartialMessages: true 才有 token 级流式（默认关闭时只能看到完整消息）。
+- `forwardSubagentText` 由 `traceSubagents` 驱动：开启时才要求 SDK 转发子代理的 text/thinking 全文；关闭时子代理消息被丢弃、不进主轨迹。
 - 官方 dsh-subagent-claude-code 未开启该选项，故看不到流式。

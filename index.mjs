@@ -18,6 +18,8 @@ const DEFAULTS = {
   executable: "claude",
   persistSession: true,
   includePartialMessages: true,
+  // 追踪 Claude Code 内部子代理（Agent/Task 工具 spawn）为独立 DSH 子 session。
+  traceSubagents: true,
   env: {},
   // 可选：手动指定模型上下文窗口（token 数）。result.modelUsage 取不到时兜底。
   contextWindow: undefined,

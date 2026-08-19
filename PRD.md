@@ -59,6 +59,7 @@
 | Q13 | 权限交互 | **B 桥接 DSH 审批 UI** |
 | Q14 | 交付节奏 | **A 分阶段**（v1 核心闭环 → v2 增强） |
 | Q15 | 开关粒度 | **A profile 级，重启生效** |
+| Q16 | 子代理追踪 | **B 独立只读 DSH 子 session**（origin:'subagent' + subagent/descriptor，lineage 树显示；以 Agent/Task 工具调用为检测信号；前台+后台；可关） |
 
 ---
 

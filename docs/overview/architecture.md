@@ -22,6 +22,7 @@ timestamp: 2026-08-14
 - 权限映射与审批桥（lib/permission.mjs + lib/approval.mjs）：每次工具调用都重读会话 `sandbox/mode` + `approval/policy` 映射成 `canUseTool` 策略，回合中切 preset 立即生效（`workspace-write` 区内放行、区外走 `ctx.approval.request` 审批；`danger-full-access` 在回合起点设 `permissionMode: bypassPermissions` 全放行、回合中由 `canUseTool` 直接放行；`approval/policy=never` 无交互区内放行区外拒绝）；`AskUserQuestion` 经 `ctx.userQuestions.ask` 弹 DSH 选择题作答。
 - 双通道认证（lib/auth.mjs）：原生 claude 登录 + ANTHROPIC_API_KEY。
 - 精确续接（lib/store.mjs）：旁路持久化 Claude 会话 id，`resolveResumeState` 在 resume 时恢复。
+- 子代理追踪（lib/subagents.mjs + lib/trace.mjs + lib/driver.mjs）：Claude Code 内部子代理由 Agent/Task 工具 spawn，以主轨迹里的 `tool_use` 块为权威信号（不再依赖 SDK 的 `task_*` 系统消息），每个子代理建成一个独立只读 DSH 子 session（`origin:'subagent'` + `parentSession` + `delegationDepth` + `subagent/descriptor`）；SDK 转发消息（带 `parent_tool_use_id`）经 `ClaudeRunTracer` 归位成子轨迹，父线程 `tool_result` 收尾（前台当轮、后台跨轮）。主轨迹里 Agent/Task 工具调用映射成 wire 名 `subagent`。
 
 # 事件映射
 
@@ -30,5 +31,5 @@ timestamp: 2026-08-14
 # 已知限制
 
 - preset id 只当路由键：切到 Claude 的 preset，其 DSH 工具与人设（persona）**不透传**给 Claude Code（Claude 自带工具与默认人设）。
-- 子代理始终走 DeepSeek（与顶层路由无关）。
+- 子代理是「只读投影」：Claude Code 内部子代理（Agent/Task）只映射成 lineage 树里的只读子 session 展示轨迹，不挂 DSH Agent、不可续跑/steer，也不走 `ctx.subagents` 的原生委派 seam。
 - 精确续接依赖插件旁路持久化（`~/.dsh/dsh-claude-code/sessions.json`）；若该文件丢失，Claude 会话退化为重放而非精确续接。

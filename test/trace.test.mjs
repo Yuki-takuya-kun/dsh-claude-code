@@ -172,6 +172,9 @@ test("mapToolName / mapToolInput map tables", () => {
   assert.equal(mapToolName("Skill"), "skill");
   assert.equal(mapToolName("MultiEdit"), "edit");
   assert.equal(mapToolName("UnknownTool"), "UnknownTool");
+  // 子代理委派工具（Agent 新名 / Task 旧名）→ DSH 原生 subagent 卡片
+  assert.equal(mapToolName("Agent"), "subagent");
+  assert.equal(mapToolName("Task"), "subagent");
   assert.deepEqual(mapToolInput("Skill", { command: "x" }), { name: "x" });
   // 非 { command } 入参原样返回
   assert.deepEqual(mapToolInput("Skill", { name: "already" }), { name: "already" });

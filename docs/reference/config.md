@@ -18,6 +18,7 @@ timestamp: 2026-08-14
 | executable | "claude" | Claude Code 可执行（路径或 PATH 名） |
 | persistSession | true | 跨轮复用 Claude 会话 |
 | includePartialMessages | true | token 级流式 |
+| traceSubagents | true | 把 Claude Code 内部子代理（Agent/Task 工具 spawn）追踪为独立只读 DSH 子 session |
 | env | {} | 额外环境变量（如 ANTHROPIC_API_KEY） |
 | contextWindow | 未配置 | 手动指定模型上下文窗口（token 数），`result.modelUsage` 取不到时兜底 |
 

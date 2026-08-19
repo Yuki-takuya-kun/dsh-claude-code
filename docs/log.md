@@ -1,5 +1,9 @@
 # Documentation Update Log
 
+## 2026-08-19
+
+* **Feature**: 子代理追踪——Claude Code 内部子代理（Agent/Task 工具 spawn）以前只能看到父轨迹里一个通用工具调用，看不到子代理干了什么。改为：以主轨迹里 Agent/Task 工具的 `tool_use` 块为权威信号（不再依赖 SDK 的 `task_started`/`task_notification` 等旧 Task 工具生命周期事件，新 Agent 工具可能不发），每个子代理建一个独立只读 DSH 子 session（`origin:'subagent'` + `parentSession` + `delegationDepth` + `subagent/descriptor`）；SDK 转发消息（带 `parent_tool_use_id`）经 `ClaudeRunTracer` 归位成子轨迹，父线程 `tool_result` 收尾（前台当轮、后台跨轮）；主轨迹里 Agent/Task 工具调用映射成 wire 名 `subagent`。新增 `lib/subagents.mjs` 与 `test/subagents.test.mjs`，配置新增 `traceSubagents`（默认 true）。同步 [事件映射](/reference/event-mapping.md)、[架构](/overview/architecture.md)、[配置](/reference/config.md) 与单测 `test/trace.test.mjs`。
+
 ## 2026-08-18
 
 * **Feature**: 上下文构成拆解——界面此前只显示 `messageTokens`（对话），`systemTokens`/`toolsTokens` 恒 0，因为 dsh-claude-code 没写 `request/header`。改为在 `system/init` 时写一条 `request/header`：`config` 用 provider + model，`tools` 由 SDK 的 `system/init.tools` 映射成占位 schema，`system` 写一句占位说明（Claude Code 系统提示词由 CLI 内部生成、SDK 不暴露原文）。经 sink 的 `requestHeader()` 跨轮去重。同步 [事件映射](/reference/event-mapping.md)、[架构](/overview/architecture.md) 与单测 `test/trace.test.mjs`。
