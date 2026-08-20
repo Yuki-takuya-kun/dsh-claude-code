@@ -14,6 +14,7 @@ timestamp: 2026-08-14
 # 关键机制
 
 - 引擎注册（index.mjs）：`dsh-claude-code` 定义 `claude-code` 引擎对象 `{ id, name, description, presetDir, makeAgent, resolveResumeState }`，`apply()` 里 `ctx.engineSwitch.register(...)` 注册（`inject: ["engineSwitch"]`）。
+- 模型选择兜底（index.mjs + lib/llm-route.mjs）：额外把 `claude-code` 注册成一个「休眠」LLM provider 路由——只贡献目录、`stream()` 显式抛错，从不转发。DSH 前端模型选择/输入框拦截 `routeServed` 只查 `ctx.llm.listProviders()`，而 trace.mjs 会把 `provider: "claude-code"` 写进会话 `request/header`（用量归因）；不注册该路由，首轮之后 `session.models` 会报 `routable:false`、锁死输入框显示「当前模型不可用，请先选择模型」。注册随插件 fiber 释放（HMR 安全）。
 - 路由（dsh-engine-switch 负责）：`engineByPreset` 命中 > 引擎自带预设（id 即引擎 id）> `defaultEngine`；空白会话内切预设即 swap 引擎；resume 按 `resolveSessionPreset`（读日志）反推。`dsh-claude-code` 不替换 `ctx.agents.factory`。
 - 预设落地（dsh-engine-switch 的 registry onRegister）：注册引擎时把其 `presetDir` 写到用户 root（`~/.dsh/.agent-presets/claude-code/`），发现过程每次 list() 重扫，即出现在预设列表。
 - ClaudeCodeAgent（lib/agent.mjs）：实现 dsh-agent 公开 Agent 接口（Inbox、状态、取消），按 `next-turn` 队列每轮跑一次 Claude Code。注入到 `next-step` 的上下文消息（如切 Full access 时 user-approval 注入的「approval policy changed」提示）不单独开回合，只随下一个真实用户回合一起排空、作为前缀并入提示词。

@@ -4,6 +4,7 @@
 import { fileURLToPath } from "node:url";
 import { ClaudeCodeAgent } from "./lib/agent.mjs";
 import { load as loadClaudeSessionId } from "./lib/store.mjs";
+import { ClaudeCodeLlmRoute, CLAUDE_CODE_PROVIDER } from "./lib/llm-route.mjs";
 
 export const name = "dsh-claude-code";
 export const inject = ["engineSwitch"];
@@ -49,5 +50,18 @@ const claudeCodeEngine = {
 
 export function apply(ctx) {
   ctx.engineSwitch.register(claudeCodeEngine);
+
+  // 注册休眠的 `claude-code` LLM 路由，让前端模型选择把该 provider 判为「已服务」，
+  // 否则 trace.mjs 写进 request/header 的 `provider: "claude-code"` 会触发输入框拦截
+  // （routeServed 只查 ctx.llm.listProviders()）。无 llm 注册表时无需注册——routeServed
+  // 对「无 llm」本身即判已服务。注册随本插件 fiber 释放。
+  const llm = ctx.get("llm");
+  if (llm !== undefined) {
+    ctx.effect(() => {
+      const unregister = llm.registerAdapter([CLAUDE_CODE_PROVIDER], new ClaudeCodeLlmRoute());
+      return () => { unregister(); };
+    }, "dsh-claude-code: llm route");
+  }
+
   ctx.logger?.info?.(`dsh-claude-code: registered engine "${CLAUDE_CODE_ENGINE_ID}"`);
 }
